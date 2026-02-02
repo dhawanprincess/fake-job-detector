@@ -7,7 +7,7 @@ This project helps users identify fraudulent job ads that ask for money, persona
 ---
 
 ## 👨‍💻 Author
-**Harish Yadav**  
+**Harish Kumar**  
 Machine Learning | Python | Data Science
 
 ---
@@ -25,12 +25,11 @@ Machine Learning | Python | Data Science
 
 ## 📂 Project Structure
 Fake-job-detector/
-│
-├── app.py # Streamlit web app
-├── train_model.py # Model training script
-├── fake_job_detector.joblib # Trained model
-├── requirements.txt # Project dependencies
-└── README.md
+── app.py # Streamlit web app/
+── train_model.py # Model training script/
+── fake_job_detector.joblib # Trained model/
+── requirements.txt # Project dependencies/
+── README.md
 
 ---
 
@@ -47,23 +46,23 @@ Fake-job-detector/
 ## ▶️ How to Run the Project
 
 ### Step 1: Install dependencies
-```bash
 pip install -r requirements.txt
-Step 2: Train the model
+### Step 2: Train the model
 python train_model.py
-Step 3: Run the web app
+### Step 3: Run the web app
 streamlit run app.py
 
-🧪 Example
+---
+
+## 🧪 Example
 Fake Job
-
 Earn 50,000 per week working from home! No experience required. Pay small registration fee.
-
 Real Job
-
 We are hiring a Software Engineer with Python, AWS and REST API experience.
 
-🚀 Future Improvements
+---
+
+## 🚀 Future Improvements
 
 Train on large real-world dataset
 
