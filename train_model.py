@@ -1,57 +1,157 @@
-# train_model.py
 import pandas as pd
+import joblib
+
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import classification_report, accuracy_score
-import joblib
-import nltk
-import os
+from sklearn.metrics import (
+    classification_report,
+    accuracy_score,
+    confusion_matrix
+)
 
-# ensure nltk stopwords available
-nltk_data_dir = os.path.join(os.path.expanduser("~"), "nltk_data")
-nltk.download("stopwords", download_dir=nltk_data_dir)
 
-# ----- SAMPLE dataset (expand later) -----
-data = [
-    # REAL job posts (1)
-    ("We are looking for a Software Engineer with 2+ years of experience in Python, REST APIs and AWS. Apply at careers@company.com", 1),
-    ("Join our team as a Data Analyst. Must know SQL and Excel. Competitive salary and benefits. Visit company website to apply.", 1),
-    ("Marketing intern position at well-known FMCG. Internship stipend and certificate on completion. Send resume to hr@brand.com", 1),
-    ("Full-time role: Frontend developer required with React, CSS, HTML skills. Office location: Gurgaon. Contact through official portal.", 1),
-    ("Hiring: Senior ML Engineer. PhD/Masters preferred. Medical insurance and provident fund included. Apply via company portal.", 1),
+# =========================
+# 1. Load dataset
+# =========================
 
-    # FAKE / SCAM job posts (0)
-    ("Earn 50,000 per week working from home! No experience required, just pay a small training fee of $99 to start.", 0),
-    ("Congratulations! You have been shortlisted. Send your Aadhar and bank details to receive joining bonus immediately.", 0),
-    ("Work from home data entry. Paid daily. First pay after registration fee. Email us on quickpay-scams@example.com", 0),
-    ("We will give you a job if you buy starter kit (~2000). Very easy work. Only few positions left. Contact immediately.", 0),
-    ("Urgent hiring: Send your PAN and UPI details to receive salary advance. Immediate joining after small verification fee.", 0),
+DATA_PATH = "data/fake_job_postings.csv"
+
+print("Loading dataset...")
+
+df = pd.read_csv(DATA_PATH)
+
+print(f"Dataset shape: {df.shape}")
+
+
+# =========================
+# 2. Prepare text
+# =========================
+
+text_columns = [
+    "title",
+    "company_profile",
+    "description",
+    "requirements",
+    "benefits"
 ]
 
-df = pd.DataFrame(data, columns=["text", "label"])
-print("Sample dataset:")
-print(df.head(10))
+# Replace missing values with empty strings
+for col in text_columns:
+    df[col] = df[col].fillna("")
 
-# ----- train/test split -----
-X_train, X_test, y_train, y_test = train_test_split(df["text"], df["label"], test_size=0.2, random_state=42, stratify=df["label"])
+# Combine all useful text fields
+df["text"] = df[text_columns].agg(" ".join, axis=1)
 
-# ----- pipeline -----
+# Target:
+# 0 = REAL
+# 1 = FAKE / FRAUDULENT
+y = df["fraudulent"]
+X = df["text"]
+
+
+# =========================
+# 3. Show class distribution
+# =========================
+
+print("\nClass distribution:")
+print(y.value_counts())
+
+print("\n0 = REAL")
+print("1 = FAKE / FRAUDULENT")
+
+
+# =========================
+# 4. Train/Test split
+# =========================
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.20,
+    random_state=42,
+    stratify=y
+)
+
+print(f"\nTraining samples: {len(X_train)}")
+print(f"Testing samples:  {len(X_test)}")
+
+
+# =========================
+# 5. ML Pipeline
+# =========================
+
 pipeline = Pipeline([
-    ("tfidf", TfidfVectorizer(stop_words="english", ngram_range=(1,2), max_features=5000)),
-    ("clf", LogisticRegression(solver="liblinear"))
+    (
+        "tfidf",
+        TfidfVectorizer(
+            stop_words="english",
+            ngram_range=(1, 2),
+            max_features=50000,
+            min_df=2,
+            sublinear_tf=True
+        )
+    ),
+    (
+        "clf",
+        LogisticRegression(
+            max_iter=1000,
+            class_weight="balanced",
+            solver="liblinear",
+            random_state=42
+        )
+    )
 ])
 
-# ----- train -----
+
+# =========================
+# 6. Train
+# =========================
+
+print("\nTraining model...")
+print("This may take a few minutes on an i3 laptop.")
+
 pipeline.fit(X_train, y_train)
 
-# ----- eval -----
-y_pred = pipeline.predict(X_test)
-print("\nAccuracy:", accuracy_score(y_test, y_pred))
-print("\nClassification report:\n", classification_report(y_test, y_pred))
 
-# ----- save model -----
-model_path = "fake_job_detector.joblib"
-joblib.dump(pipeline, model_path)
-print(f"\nModel saved to {model_path}")
+# =========================
+# 7. Evaluation
+# =========================
+
+print("\nMaking predictions...")
+
+y_pred = pipeline.predict(X_test)
+
+accuracy = accuracy_score(y_test, y_pred)
+
+print("\n==============================")
+print("MODEL RESULTS")
+print("==============================")
+
+print(f"\nAccuracy: {accuracy:.4f}")
+
+print("\nClassification Report:")
+print(
+    classification_report(
+        y_test,
+        y_pred,
+        target_names=["REAL", "FAKE"]
+    )
+)
+
+print("\nConfusion Matrix:")
+print(confusion_matrix(y_test, y_pred))
+
+
+# =========================
+# 8. Save model
+# =========================
+
+MODEL_PATH = "fake_job_detector.joblib"
+
+joblib.dump(pipeline, MODEL_PATH)
+
+print("\n==============================")
+print(f"Model saved to: {MODEL_PATH}")
+print("==============================")

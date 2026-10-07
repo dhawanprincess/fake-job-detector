@@ -1,78 +1,256 @@
-# app.py
 import streamlit as st
 import joblib
-import pandas as pd
 import numpy as np
 import re
 from pathlib import Path
 
-st.set_page_config(page_title="Fake Job Detector", layout="centered")
-st.title("Fake Job Posting Detector — Harish Demo")
-st.write("Paste a job description and the model will predict whether it's likely **REAL** or **FAKE/SCAM**.")
+
+# =========================
+# Page configuration
+# =========================
+
+st.set_page_config(
+    page_title="Fake Job Detector",
+    page_icon="🔍",
+    layout="centered"
+)
+
+st.title("🔍 Fake Job Posting Detector")
+st.write(
+    "Paste a job description below and the model will predict "
+    "whether it is likely **REAL** or **FAKE / SCAM**."
+)
+
+
+# =========================
+# Load trained model
+# =========================
 
 MODEL_PATH = "fake_job_detector.joblib"
 
-# Load model
 if not Path(MODEL_PATH).exists():
-    st.error("Model not found. Run `python train_model.py` first to create the model.")
+    st.error(
+        "Model not found. Please run `python train_model.py` first."
+    )
     st.stop()
 
 model = joblib.load(MODEL_PATH)
 
+
+# =========================
+# Text preprocessing
+# =========================
+
 def preprocess_text(text):
-    t = text.strip()
-    # simple cleaning
-    t = re.sub(r"\s+", " ", t)
-    return t
+    text = text.strip()
+    text = re.sub(r"\s+", " ", text)
+    return text
 
-# Input box
-job_text = st.text_area("Paste job description here", height=200)
 
-col1, col2 = st.columns(2)
-with col1:
-    if st.button("Predict"):
-        if not job_text.strip():
-            st.warning("Please paste a job description first.")
+# =========================
+# Input
+# =========================
+
+job_text = st.text_area(
+    "📄 Paste Job Description",
+    height=250,
+    placeholder="Paste the complete job description here..."
+)
+
+
+# =========================
+# Prediction
+# =========================
+
+if st.button("🔍 Analyze Job", use_container_width=True):
+
+    if not job_text.strip():
+
+        st.warning("Please paste a job description first.")
+
+    else:
+
+        text_proc = preprocess_text(job_text)
+
+        # Dataset labels:
+        # 0 = REAL
+        # 1 = FAKE
+
+        probabilities = model.predict_proba([text_proc])[0]
+
+        prediction = model.predict([text_proc])[0]
+
+        prob_real = probabilities[0]
+        prob_fake = probabilities[1]
+
+
+        # =========================
+        # Result
+        # =========================
+
+        st.markdown("---")
+
+        if prediction == 1:
+
+            st.error("🚨 Prediction: FAKE / SCAM")
+
+            st.metric(
+                "Fake Probability",
+                f"{prob_fake * 100:.1f}%"
+            )
+
         else:
-            text_proc = preprocess_text(job_text)
-            proba = model.predict_proba([text_proc])[0]
-            pred = model.predict([text_proc])[0]
-            # proba[1] = prob of REAL (label 1)
-            prob_real = proba[1]
-            prob_fake = proba[0]
 
-            if pred == 1:
-                st.success(f"Prediction: **REAL** (confidence {prob_real*100:.1f}%)")
-            else:
-                st.error(f"Prediction: **FAKE / SCAM** (confidence {prob_fake*100:.1f}%)")
+            st.success("✅ Prediction: REAL")
 
-            # show probabilities
-            st.write({"Real (1)": f"{prob_real*100:.1f}%", "Fake (0)": f"{prob_fake*100:.1f}%"})
+            st.metric(
+                "Real Probability",
+                f"{prob_real * 100:.1f}%"
+            )
 
-            # show top contributing features (approx) using coef
-            try:
-                # works for linear models with vectorizer
-                vec = model.named_steps["tfidf"]
-                clf = model.named_steps["clf"]
-                X_vec = vec.transform([text_proc])
-                feature_names = np.array(vec.get_feature_names_out())
-                coefs = clf.coef_[0]
-                # multiply tfidf values with coefs to estimate contributions
-                contrib = X_vec.toarray()[0] * coefs
-                top_idx = np.argsort(contrib)[-8:][::-1]
-                top_features = feature_names[top_idx]
-                top_values = contrib[top_idx]
-                st.markdown("**Top contributing tokens (approx):**")
-                for tok, val in zip(top_features, top_values):
-                    st.write(f"- {tok}  → {val:.3f}")
-            except Exception as e:
-                st.write("Feature contribution not available:", e)
 
-with col2:
-    if st.button("Example: Show sample FAKE"):
-        st.write("**Fake sample:** Earn 50,000 per week working from home! No experience required, just pay a small training fee of $99 to start.")
-    if st.button("Example: Show sample REAL"):
-        st.write("**Real sample:** We are looking for a Software Engineer with 2+ years of experience in Python, REST APIs and AWS. Apply at careers@company.com")
+        # =========================
+        # Probability breakdown
+        # =========================
+
+        st.subheader("📊 Model Probability")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.metric(
+                "Real",
+                f"{prob_real * 100:.1f}%"
+            )
+
+        with col2:
+            st.metric(
+                "Fake / Scam",
+                f"{prob_fake * 100:.1f}%"
+            )
+
+
+        st.progress(float(prob_fake))
+
+        st.caption(
+            "These are model probabilities, not guaranteed certainty."
+        )
+
+
+        # =========================
+        # Feature contribution
+        # =========================
+
+        try:
+
+            vec = model.named_steps["tfidf"]
+            clf = model.named_steps["clf"]
+
+            X_vec = vec.transform([text_proc])
+
+            feature_names = np.array(
+                vec.get_feature_names_out()
+            )
+
+            coefs = clf.coef_[0]
+
+            contributions = X_vec.toarray()[0] * coefs
+
+            # For this model:
+            # positive contribution → FAKE
+            # negative contribution → REAL
+
+            top_fake_idx = np.argsort(contributions)[-8:][::-1]
+
+            top_real_idx = np.argsort(contributions)[:8]
+
+            st.subheader("🔎 Important Signals")
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+
+                st.markdown("### 🚨 Fake signals")
+
+                for idx in top_fake_idx:
+
+                    if contributions[idx] > 0:
+
+                        st.write(
+                            f"**{feature_names[idx]}** "
+                            f"→ +{contributions[idx]:.3f}"
+                        )
+
+            with col2:
+
+                st.markdown("### ✅ Real signals")
+
+                for idx in top_real_idx:
+
+                    if contributions[idx] < 0:
+
+                        st.write(
+                            f"**{feature_names[idx]}** "
+                            f"→ {contributions[idx]:.3f}"
+                        )
+
+        except Exception as e:
+
+            st.info(
+                "Feature explanation is not available for this prediction."
+            )
+
+
+# =========================
+# Example jobs
+# =========================
 
 st.markdown("---")
-st.write("Tip: This is a simple prototype. To improve accuracy, train with a larger labelled dataset and tune classifier.")
+
+st.subheader("🧪 Try an Example")
+
+col1, col2 = st.columns(2)
+
+with col1:
+
+    if st.button("🚨 Fake Example"):
+
+        st.code(
+            """
+Earn $5,000 per week working from home!
+No experience required.
+
+Pay a small registration fee of $99
+to receive your starter kit.
+
+Limited positions available.
+Apply immediately!
+            """
+        )
+
+
+with col2:
+
+    if st.button("✅ Real Example"):
+
+        st.code(
+            """
+We are looking for a Software Engineer
+with 2+ years of experience in Python,
+REST APIs and AWS.
+
+The selected candidate will receive
+competitive salary, medical insurance,
+and other company benefits.
+
+Apply through our official careers portal.
+            """
+        )
+
+
+st.markdown("---")
+
+st.caption(
+    "⚠️ This system provides an ML-based prediction and should "
+    "not be treated as definitive proof that a job is fraudulent."
+)
